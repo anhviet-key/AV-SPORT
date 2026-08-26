@@ -41,7 +41,7 @@ jobs:
 
       - name: Build release APK (debug-signed fallback)
         working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        run: bash ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Publish APK and update manifest
         if: success()
