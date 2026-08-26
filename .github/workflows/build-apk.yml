@@ -1,0 +1,78 @@
+name: Build AV Sport APK
+
+on:
+  push:
+    paths:
+      - "android/**"
+      - ".github/workflows/build-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Read version from gradle.properties
+        id: version
+        run: |
+          VERSION_NAME=$(grep '^AV_SPORT_VERSION_NAME=' android/gradle.properties | cut -d= -f2 | tr -d '\r')
+          VERSION_CODE=$(grep '^AV_SPORT_VERSION_CODE=' android/gradle.properties | cut -d= -f2 | tr -d '\r')
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Building AV Sport $VERSION_NAME ($VERSION_CODE)"
+
+      - name: Build release APK (debug-signed fallback)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Publish APK and update manifest
+        if: success()
+        run: |
+          VERSION_NAME="${{ steps.version.outputs.name }}"
+          VERSION_CODE="${{ steps.version.outputs.code }}"
+          APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+          APK_DST="releases/av-sport-${VERSION_NAME}.apk"
+
+          if [ ! -f "$APK_SRC" ]; then
+            APK_SRC="android/app/build/outputs/apk/release/app-release-unsigned.apk"
+          fi
+
+          cp "$APK_SRC" "$APK_DST"
+
+          TODAY=$(date +%F)
+          jq -n --arg v "$VERSION_NAME" --argjson c "$VERSION_CODE" --arg d "$TODAY" '{
+            appName: "AV Sport",
+            version: $v,
+            versionCode: $c,
+            apkUrl: ("https://raw.githubusercontent.com/anhviet-key/AV-SPORT/main/releases/av-sport-" + $v + ".apk"),
+            publishedAt: $d,
+            required: false
+          }' > app-update.json
+
+          git config user.name "av-sport-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add releases/ app-update.json
+          if git diff --cached --quiet; then
+            echo "Nothing to publish"
+            exit 0
+          fi
+          git commit -m "Release AV Sport ${VERSION_NAME} (build ${VERSION_CODE}) [skip ci]"
+          git push
