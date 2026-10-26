@@ -4,3 +4,5 @@ android/build/
 android/local.properties
 *.keystore
 !debug.keystore
+!android/keystore/release.keystore
+!android/keystore/*.keystore
