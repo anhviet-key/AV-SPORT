@@ -27,9 +27,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Read version from gradle.properties
         id: version
         run: |
@@ -41,7 +38,9 @@ jobs:
 
       - name: Build release APK (debug-signed fallback)
         working-directory: android
-        run: bash ./gradlew assembleRelease --no-daemon --stacktrace
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Publish APK and update manifest
         if: success()
