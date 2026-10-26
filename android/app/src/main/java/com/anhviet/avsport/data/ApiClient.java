@@ -174,18 +174,26 @@ public class ApiClient {
                         JSONArray anchors = m.optJSONArray("anchors");
                         boolean hasLiveStream = false;
                         JSONArray anchorPayload = new JSONArray();
+                        StringBuilder anchorNames = new StringBuilder();
 
                         if (anchors != null) {
                             for (int a = 0; a < anchors.length(); a++) {
                                 JSONObject anchorObj = anchors.getJSONObject(a);
                                 String uid = String.valueOf(anchorObj.optLong("uid", 0));
-                                String nick = anchorObj.optString("nickName", "BLV");
+                                String nick = anchorObj.optString("nickName", "BLV").trim();
                                 JSONObject roomObj = anchorObj.optJSONObject("anchor");
                                 String room = roomObj != null ? roomObj.optString("roomNum", uid) : uid;
 
                                 boolean isAnchorLive = livingStreams.containsKey(uid) || livingStreams.containsKey(room);
                                 if (isAnchorLive) {
                                     hasLiveStream = true;
+                                }
+
+                                if (nick.length() > 0 && !nick.equalsIgnoreCase("BLV")) {
+                                    if (anchorNames.length() > 0) {
+                                        anchorNames.append(", ");
+                                    }
+                                    anchorNames.append(nick);
                                 }
 
                                 JSONObject aOpt = new JSONObject();
@@ -219,6 +227,9 @@ public class ApiClient {
                         card.put("leagueLabel", subCateName.length() > 0 ? subCateName : categoryName);
                         card.put("timeLabel", timeLabel);
                         card.put("statusLabel", statusLabel);
+                        if (anchorNames.length() > 0) {
+                            card.put("commentator", anchorNames.toString());
+                        }
 
                         itemArray.put(card);
                     }
@@ -296,6 +307,7 @@ public class ApiClient {
                         card.put("leagueLabel", "Socolive Live");
                         card.put("timeLabel", "Đang live");
                         card.put("statusLabel", isLive ? "Trực tiếp" : "Live");
+                        card.put("commentator", nick);
 
                         itemArray.put(card);
                     }

@@ -289,6 +289,7 @@ public class MainActivity extends Activity {
         cardList = new RecyclerView(this);
         cardList.setHasFixedSize(true);
         cardList.setClipToPadding(false);
+        cardList.setPadding(Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 4), Ui.dp(this, 50));
         cardList.setItemViewCacheSize(16);
         cardList.setLayoutManager(new GridLayoutManager(this, columnsForScreen()));
         cardList.setAdapter(cardAdapter);
@@ -578,8 +579,45 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean isPortraitPhone() {
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float dpWidth = dm.widthPixels / dm.density;
+        int orientation = getResources().getConfiguration().orientation;
+        return orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT && dpWidth < 600;
+    }
+
     private int columnsForScreen() {
-        return getResources().getDisplayMetrics().widthPixels >= 1600 ? 4 : 3;
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float dpWidth = dm.widthPixels / dm.density;
+        int orientation = getResources().getConfiguration().orientation;
+
+        if (orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT) {
+            return dpWidth >= 600 ? 2 : 1;
+        } else {
+            if (dpWidth >= 960) {
+                return 4;
+            } else if (dpWidth >= 600) {
+                return 3;
+            } else {
+                return 2;
+            }
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        try {
+            int columns = columnsForScreen();
+            androidx.recyclerview.widget.RecyclerView.LayoutManager lm = cardList.getLayoutManager();
+            if (lm instanceof androidx.recyclerview.widget.GridLayoutManager) {
+                ((androidx.recyclerview.widget.GridLayoutManager) lm).setSpanCount(columns);
+            }
+            if (cardAdapter != null) {
+                cardAdapter.notifyDataSetChanged();
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private final class CardAdapter extends RecyclerView.Adapter<CardHolder> {
@@ -611,12 +649,25 @@ public class MainActivity extends Activity {
         private final FrameLayout frame;
         private final ImageView backgroundImage;
         private final View imageShade;
-        private final ImageView homeLogo;
-        private final ImageView awayLogo;
-        private final TextView time;
-        private final TextView status;
-        private final TextView title;
-        private final TextView league;
+
+        private final TextView leagueView;
+        private final TextView statusBadge;
+
+        private final LinearLayout matchContainer;
+        private final LinearLayout homeRow;
+        private final ImageView homeLogoView;
+        private final TextView homeNameView;
+        private final TextView homeScoreView;
+
+        private final LinearLayout awayRow;
+        private final ImageView awayLogoView;
+        private final TextView awayNameView;
+        private final TextView awayScoreView;
+
+        private final LinearLayout singleTitleContainer;
+        private final TextView singleTitleView;
+
+        private final TextView commentatorView;
 
         CardHolder() {
             super(new FrameLayout(MainActivity.this));
@@ -625,89 +676,179 @@ public class MainActivity extends Activity {
             frame.setClickable(true);
             frame.setPadding(0, 0, 0, 0);
             frame.setClipToOutline(true);
-            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, Ui.dp(MainActivity.this, 260));
-            params.setMargins(Ui.dp(MainActivity.this, 6), Ui.dp(MainActivity.this, 6), Ui.dp(MainActivity.this, 6), Ui.dp(MainActivity.this, 6));
+
+            int cardHeight = isPortraitPhone() ? Ui.dp(MainActivity.this, 128) : Ui.dp(MainActivity.this, 160);
+            RecyclerView.LayoutParams params = new RecyclerView.LayoutParams(-1, cardHeight);
+            params.setMargins(Ui.dp(MainActivity.this, 5), Ui.dp(MainActivity.this, 5), Ui.dp(MainActivity.this, 5), Ui.dp(MainActivity.this, 5));
             frame.setLayoutParams(params);
 
             backgroundImage = new ImageView(MainActivity.this);
-            backgroundImage.setAlpha(0.28f);
+            backgroundImage.setAlpha(0.18f);
             backgroundImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
             frame.addView(backgroundImage, new FrameLayout.LayoutParams(-1, -1));
 
             imageShade = new View(MainActivity.this);
-            imageShade.setBackgroundColor(0xB202070D);
+            imageShade.setBackgroundColor(0xCC060E18);
             frame.addView(imageShade, new FrameLayout.LayoutParams(-1, -1));
 
-            homeLogo = new ImageView(MainActivity.this);
-            homeLogo.setAlpha(0.6f);
-            homeLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            FrameLayout.LayoutParams homeParams = new FrameLayout.LayoutParams(Ui.dp(MainActivity.this, 100), Ui.dp(MainActivity.this, 100), Gravity.LEFT | Gravity.CENTER_VERTICAL);
-            homeParams.setMargins(Ui.dp(MainActivity.this, 14), 0, 0, Ui.dp(MainActivity.this, 20));
-            frame.addView(homeLogo, homeParams);
+            LinearLayout content = new LinearLayout(MainActivity.this);
+            content.setOrientation(LinearLayout.VERTICAL);
+            content.setPadding(Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 10), Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 10));
+            frame.addView(content, new FrameLayout.LayoutParams(-1, -1));
 
-            awayLogo = new ImageView(MainActivity.this);
-            awayLogo.setAlpha(0.6f);
-            awayLogo.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            FrameLayout.LayoutParams awayParams = new FrameLayout.LayoutParams(Ui.dp(MainActivity.this, 100), Ui.dp(MainActivity.this, 100), Gravity.RIGHT | Gravity.CENTER_VERTICAL);
-            awayParams.setMargins(0, 0, Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 20));
-            frame.addView(awayLogo, awayParams);
+            LinearLayout topRow = new LinearLayout(MainActivity.this);
+            topRow.setOrientation(LinearLayout.HORIZONTAL);
+            topRow.setGravity(Gravity.CENTER_VERTICAL);
 
-            LinearLayout top = new LinearLayout(MainActivity.this);
-            top.setGravity(Gravity.CENTER_VERTICAL);
-            time = Ui.pill(MainActivity.this, "", Ui.CARD);
-            top.addView(time);
-            status = Ui.pill(MainActivity.this, "", Ui.GREEN);
-            LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(-2, -2);
-            statusParams.setMargins(Ui.dp(MainActivity.this, 8), 0, 0, 0);
-            top.addView(status, statusParams);
-            FrameLayout.LayoutParams topParams = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.RIGHT);
-            topParams.setMargins(0, Ui.dp(MainActivity.this, 10), Ui.dp(MainActivity.this, 10), 0);
-            frame.addView(top, topParams);
+            leagueView = Ui.text(MainActivity.this, "", 12, Color.rgb(148, 163, 184), Typeface.BOLD);
+            leagueView.setSingleLine(true);
+            leagueView.setEllipsize(TextUtils.TruncateAt.END);
+            topRow.addView(leagueView, new LinearLayout.LayoutParams(0, -2, 1));
 
-            LinearLayout bottom = new LinearLayout(MainActivity.this);
-            bottom.setOrientation(LinearLayout.VERTICAL);
-            bottom.setGravity(Gravity.BOTTOM);
-            title = Ui.text(MainActivity.this, "", 20, Ui.TEXT, Typeface.BOLD);
-            title.setMaxLines(2);
-            title.setEllipsize(TextUtils.TruncateAt.END);
-            bottom.addView(title);
-            league = Ui.text(MainActivity.this, "", 14, Ui.MUTED, Typeface.NORMAL);
-            league.setSingleLine(true);
-            league.setEllipsize(TextUtils.TruncateAt.END);
-            LinearLayout.LayoutParams leagueParams = new LinearLayout.LayoutParams(-1, -2);
-            leagueParams.setMargins(0, Ui.dp(MainActivity.this, 6), 0, 0);
-            bottom.addView(league, leagueParams);
-            FrameLayout.LayoutParams bottomParams = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
-            bottomParams.setMargins(Ui.dp(MainActivity.this, 14), 0, Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 14));
-            frame.addView(bottom, bottomParams);
+            statusBadge = Ui.pill(MainActivity.this, "", Ui.CARD);
+            topRow.addView(statusBadge, new LinearLayout.LayoutParams(-2, -2));
+            content.addView(topRow, new LinearLayout.LayoutParams(-1, -2));
+
+            matchContainer = new LinearLayout(MainActivity.this);
+            matchContainer.setOrientation(LinearLayout.VERTICAL);
+            matchContainer.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams matchParams = new LinearLayout.LayoutParams(-1, 0, 1);
+            matchParams.setMargins(0, Ui.dp(MainActivity.this, 4), 0, Ui.dp(MainActivity.this, 4));
+            content.addView(matchContainer, matchParams);
+
+            homeRow = new LinearLayout(MainActivity.this);
+            homeRow.setOrientation(LinearLayout.HORIZONTAL);
+            homeRow.setGravity(Gravity.CENTER_VERTICAL);
+
+            homeLogoView = new ImageView(MainActivity.this);
+            homeLogoView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            LinearLayout.LayoutParams homeLogoParams = new LinearLayout.LayoutParams(Ui.dp(MainActivity.this, 26), Ui.dp(MainActivity.this, 26));
+            homeLogoParams.setMargins(0, 0, Ui.dp(MainActivity.this, 8), 0);
+            homeRow.addView(homeLogoView, homeLogoParams);
+
+            homeNameView = Ui.text(MainActivity.this, "", 14, Ui.TEXT, Typeface.BOLD);
+            homeNameView.setSingleLine(true);
+            homeNameView.setEllipsize(TextUtils.TruncateAt.END);
+            homeRow.addView(homeNameView, new LinearLayout.LayoutParams(0, -2, 1));
+
+            homeScoreView = Ui.text(MainActivity.this, "", 15, Color.rgb(56, 189, 248), Typeface.BOLD);
+            homeRow.addView(homeScoreView, new LinearLayout.LayoutParams(-2, -2));
+            matchContainer.addView(homeRow, new LinearLayout.LayoutParams(-1, -2));
+
+            awayRow = new LinearLayout(MainActivity.this);
+            awayRow.setOrientation(LinearLayout.HORIZONTAL);
+            awayRow.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams awayRowParams = new LinearLayout.LayoutParams(-1, -2);
+            awayRowParams.setMargins(0, Ui.dp(MainActivity.this, 4), 0, 0);
+
+            awayLogoView = new ImageView(MainActivity.this);
+            awayLogoView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            LinearLayout.LayoutParams awayLogoParams = new LinearLayout.LayoutParams(Ui.dp(MainActivity.this, 26), Ui.dp(MainActivity.this, 26));
+            awayLogoParams.setMargins(0, 0, Ui.dp(MainActivity.this, 8), 0);
+            awayRow.addView(awayLogoView, awayLogoParams);
+
+            awayNameView = Ui.text(MainActivity.this, "", 14, Ui.TEXT, Typeface.BOLD);
+            awayNameView.setSingleLine(true);
+            awayNameView.setEllipsize(TextUtils.TruncateAt.END);
+            awayRow.addView(awayNameView, new LinearLayout.LayoutParams(0, -2, 1));
+
+            awayScoreView = Ui.text(MainActivity.this, "", 15, Color.rgb(56, 189, 248), Typeface.BOLD);
+            awayRow.addView(awayScoreView, new LinearLayout.LayoutParams(-2, -2));
+            matchContainer.addView(awayRow, awayRowParams);
+
+            singleTitleContainer = new LinearLayout(MainActivity.this);
+            singleTitleContainer.setOrientation(LinearLayout.VERTICAL);
+            singleTitleContainer.setGravity(Gravity.CENTER_VERTICAL);
+            singleTitleView = Ui.text(MainActivity.this, "", 15, Ui.TEXT, Typeface.BOLD);
+            singleTitleView.setMaxLines(2);
+            singleTitleView.setEllipsize(TextUtils.TruncateAt.END);
+            singleTitleContainer.addView(singleTitleView, new LinearLayout.LayoutParams(-1, -2));
+            singleTitleContainer.setVisibility(View.GONE);
+            content.addView(singleTitleContainer, new LinearLayout.LayoutParams(-1, 0, 1));
+
+            commentatorView = Ui.text(MainActivity.this, "", 12, Color.rgb(251, 191, 36), Typeface.BOLD);
+            commentatorView.setSingleLine(true);
+            commentatorView.setEllipsize(TextUtils.TruncateAt.END);
+            content.addView(commentatorView, new LinearLayout.LayoutParams(-1, -2));
         }
 
         void bind(MediaCard item, int index, int total) {
-            frame.setBackground(Ui.rounded(Ui.CARD, 16, 1, Ui.BORDER_SOFT, MainActivity.this));
-            frame.setForeground(Ui.rounded(Color.TRANSPARENT, 16, 3, Ui.BORDER, MainActivity.this));
-            time.setText(item.displayTime());
+            int cardHeight = isPortraitPhone() ? Ui.dp(MainActivity.this, 128) : Ui.dp(MainActivity.this, 160);
+            if (itemView.getLayoutParams().height != cardHeight) {
+                itemView.getLayoutParams().height = cardHeight;
+                itemView.requestLayout();
+            }
+
+            frame.setBackground(Ui.rounded(Color.rgb(11, 18, 28), 14, 1, Color.rgb(30, 41, 59), MainActivity.this));
+            frame.setForeground(Ui.rounded(Color.TRANSPARENT, 14, 2, Color.TRANSPARENT, MainActivity.this));
+
+            leagueView.setText(item.displayLeague());
 
             boolean live = isItemLive(item);
-            status.setText(live ? "● TRỰC TIẾP" : item.displayStatus());
-            status.setBackground(Ui.rounded(live ? Ui.RED : Ui.GREEN, 999, 1, Ui.BORDER, MainActivity.this));
+            if (live) {
+                statusBadge.setText("● TRỰC TIẾP");
+                statusBadge.setBackground(Ui.rounded(Ui.RED, 999, 0, 0, MainActivity.this));
+            } else {
+                statusBadge.setText(item.displayTime());
+                statusBadge.setBackground(Ui.rounded(Color.rgb(20, 32, 48), 999, 1, Color.rgb(51, 65, 85), MainActivity.this));
+            }
 
-            title.setText(item.displayTitle());
-            league.setText(item.displayLeague());
+            boolean hasTwoTeams = item.homeTeam != null && item.awayTeam != null && item.homeTeam.length() > 0 && item.awayTeam.length() > 0;
+            if (hasTwoTeams) {
+                matchContainer.setVisibility(View.VISIBLE);
+                singleTitleContainer.setVisibility(View.GONE);
+
+                homeNameView.setText(item.homeTeam);
+                awayNameView.setText(item.awayTeam);
+
+                bindLogo(homeLogoView, item.homeLogo);
+                bindLogo(awayLogoView, item.awayLogo);
+
+                homeScoreView.setText(item.homeScore != null ? item.homeScore : "");
+                awayScoreView.setText(item.awayScore != null ? item.awayScore : "");
+            } else {
+                matchContainer.setVisibility(View.GONE);
+                singleTitleContainer.setVisibility(View.VISIBLE);
+                singleTitleView.setText(item.displayTitle());
+            }
+
+            if (item.commentator != null && item.commentator.length() > 0) {
+                commentatorView.setVisibility(View.VISIBLE);
+                commentatorView.setText("🎙️ " + item.commentator);
+            } else {
+                commentatorView.setVisibility(View.GONE);
+            }
+
             bindImage(backgroundImage, bestBackgroundImage(item));
             imageShade.setVisibility(bestBackgroundImage(item) == null ? View.GONE : View.VISIBLE);
-            bindImage(homeLogo, item.homeLogo);
-            bindImage(awayLogo, item.awayLogo);
 
             frame.setOnClickListener(view -> openPlayer(item));
             frame.setOnFocusChangeListener((view, hasFocus) -> {
-                view.animate().scaleX(hasFocus ? 1.03f : 1.0f).scaleY(hasFocus ? 1.03f : 1.0f).setDuration(120).start();
-                frame.setBackground(Ui.rounded(hasFocus ? Ui.CARD_FOCUS : Ui.CARD, 16, 1, hasFocus ? Ui.FOCUS : Ui.BORDER_SOFT, MainActivity.this));
-                frame.setForeground(Ui.rounded(Color.TRANSPARENT, 16, 3, hasFocus ? Ui.YELLOW : Ui.BORDER, MainActivity.this));
+                view.animate().scaleX(hasFocus ? 1.04f : 1.0f).scaleY(hasFocus ? 1.04f : 1.0f).setDuration(120).start();
+                view.setElevation(hasFocus ? Ui.dp(MainActivity.this, 8) : Ui.dp(MainActivity.this, 2));
+                frame.setBackground(Ui.rounded(
+                    hasFocus ? Color.rgb(20, 38, 64) : Color.rgb(11, 18, 28),
+                    14,
+                    hasFocus ? 2 : 1,
+                    hasFocus ? Ui.YELLOW : Color.rgb(30, 41, 59),
+                    MainActivity.this
+                ));
+                frame.setForeground(Ui.rounded(Color.TRANSPARENT, 14, 2, hasFocus ? Ui.YELLOW : Color.TRANSPARENT, MainActivity.this));
                 if (hasFocus) {
                     selectedCardIndex = index;
                     statusText.setText("Đang chọn " + (index + 1) + " / " + total + " | " + item.displayTitle());
                 }
             });
+        }
+
+        private void bindLogo(ImageView view, String url) {
+            if (url == null || url.length() == 0) {
+                view.setImageDrawable(null);
+                view.setVisibility(View.GONE);
+                return;
+            }
+            view.setVisibility(View.VISIBLE);
+            imageLoader.load(view, apiClient.toAbsoluteUrl(url));
         }
 
         private String bestBackgroundImage(MediaCard item) {

@@ -25,6 +25,7 @@ public class MediaCard {
     public final String statusLabel;
     public final String homeScore;
     public final String awayScore;
+    public final String commentator;
 
     public MediaCard(JSONObject json) {
         id = json.optString("id");
@@ -44,6 +45,7 @@ public class MediaCard {
         statusLabel = emptyToNull(json.optString("statusLabel", null));
         homeScore = emptyToNull(json.optString("homeScore", null));
         awayScore = emptyToNull(json.optString("awayScore", null));
+        commentator = emptyToNull(json.optString("commentator", null));
     }
 
     public String displayTitle() {

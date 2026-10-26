@@ -201,6 +201,8 @@ public class PlayerActivity extends Activity {
             }
         });
         playerView.setPlayer(player);
+        playerView.setClickable(true);
+        playerView.setOnClickListener(view -> toggleOverlay());
         root.addView(playerView, new FrameLayout.LayoutParams(-1, -1));
 
         progressBar = new ProgressBar(this);
@@ -222,28 +224,36 @@ public class PlayerActivity extends Activity {
 
         LinearLayout top = new LinearLayout(this);
         top.setGravity(Gravity.CENTER_VERTICAL);
+
         Button back = actionButton("Quay lại");
         back.setOnClickListener(view -> finish());
-        top.addView(back, new LinearLayout.LayoutParams(Ui.dp(this, 150), Ui.dp(this, 56)));
+        top.addView(back, new LinearLayout.LayoutParams(-2, Ui.dp(this, 48)));
 
-        titleView = Ui.text(this, title, 24, Ui.TEXT, Typeface.BOLD);
+        titleView = Ui.text(this, title, isPortraitPhone() ? 16 : 22, Ui.TEXT, Typeface.BOLD);
         titleView.setSingleLine(true);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, -2, 1);
-        titleParams.setMargins(Ui.dp(this, 18), 0, 0, 0);
+        titleParams.setMargins(Ui.dp(this, 12), 0, Ui.dp(this, 10), 0);
         top.addView(titleView, titleParams);
 
-        hideButton = actionButton("Ẩn điều khiển");
+        Button rotateButton = actionButton("⛶ Xoay");
+        rotateButton.setOnClickListener(view -> toggleScreenOrientation());
+        styleControlButton(rotateButton, Ui.CARD_FOCUS);
+        LinearLayout.LayoutParams rotParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 48));
+        rotParams.setMargins(Ui.dp(this, 8), 0, 0, 0);
+        top.addView(rotateButton, rotParams);
+
+        hideButton = actionButton("Ẩn");
         hideButton.setOnClickListener(view -> setOverlayVisible(false));
         styleControlButton(hideButton, Ui.GREEN);
-        LinearLayout.LayoutParams hideParams = new LinearLayout.LayoutParams(Ui.dp(this, 170), Ui.dp(this, 56));
-        hideParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
+        LinearLayout.LayoutParams hideParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 48));
+        hideParams.setMargins(Ui.dp(this, 8), 0, 0, 0);
         top.addView(hideButton, hideParams);
 
-        zoomButton = actionButton("Khung hình: " + ZOOM_LABELS[zoomModeIndex]);
+        zoomButton = actionButton("Khung: " + ZOOM_LABELS[zoomModeIndex]);
         zoomButton.setOnClickListener(view -> changeZoom(1));
         styleControlButton(zoomButton, Ui.CARD_FOCUS);
-        LinearLayout.LayoutParams zoomParams = new LinearLayout.LayoutParams(Ui.dp(this, 220), Ui.dp(this, 56));
-        zoomParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
+        LinearLayout.LayoutParams zoomParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 48));
+        zoomParams.setMargins(Ui.dp(this, 8), 0, 0, 0);
         top.addView(zoomButton, zoomParams);
 
         controls.addView(top);
@@ -306,6 +316,26 @@ public class PlayerActivity extends Activity {
             hasFocus ? Ui.YELLOW : normalBorder,
             this
         )));
+    }
+
+    private boolean isPortraitPhone() {
+        android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+        float dpWidth = dm.widthPixels / dm.density;
+        int orientation = getResources().getConfiguration().orientation;
+        return orientation == android.content.res.Configuration.ORIENTATION_PORTRAIT && dpWidth < 600;
+    }
+
+    private void toggleOverlay() {
+        setOverlayVisible(!overlayVisible);
+    }
+
+    private void toggleScreenOrientation() {
+        int orientation = getResources().getConfiguration().orientation;
+        if (orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE) {
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        } else {
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+        }
     }
 
     private void setOverlayVisible(boolean visible) {
