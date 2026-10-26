@@ -126,25 +126,22 @@ public class SourceStore {
         if (sourceId == null || sourceId.length() == 0) {
             return null;
         }
-        String raw = prefs.getString(KEY_SOURCE_CACHE_PREFIX + sourceId, null);
-        if (raw == null || raw.length() == 0) {
+        String rawJson = prefs.getString(KEY_SOURCE_CACHE_PREFIX + sourceId, null);
+        if (rawJson == null || rawJson.length() == 0) {
             return null;
         }
         try {
-            return SourceListResult.fromJson(new JSONObject(raw));
+            return SourceListResult.fromJson(rawJson);
         } catch (JSONException ignored) {
             return null;
         }
     }
 
     public void writeCachedSource(String sourceId, SourceListResult result) {
-        if (sourceId == null || sourceId.length() == 0 || result == null) {
+        if (sourceId == null || sourceId.length() == 0 || result == null || result.rawJson == null || result.rawJson.length() == 0) {
             return;
         }
-        try {
-            prefs.edit().putString(KEY_SOURCE_CACHE_PREFIX + sourceId, result.toJson().toString()).apply();
-        } catch (JSONException ignored) {
-        }
+        prefs.edit().putString(KEY_SOURCE_CACHE_PREFIX + sourceId, result.rawJson).apply();
     }
 
     public void clearCachedSource(String sourceId) {
