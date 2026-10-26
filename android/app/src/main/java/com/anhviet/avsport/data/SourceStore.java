@@ -11,11 +11,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class SourceStore {
     private static final String PREFS_NAME = "av_sport_native";
@@ -25,6 +24,8 @@ public class SourceStore {
     private static final String KEY_SOURCE_COUNTS = "source_counts";
     private static final String KEY_SOURCE_CACHE_PREFIX = "source_cache_";
 
+    public static final String DEFAULT_SOURCE_ID = "seed-socolive";
+
     private final SharedPreferences prefs;
 
     public SourceStore(Context context) {
@@ -33,45 +34,37 @@ public class SourceStore {
     }
 
     public List<MediaSource> readSources() {
-        ensureDefaultSources();
-        List<MediaSource> sources = new ArrayList<>();
-        try {
-            JSONArray array = new JSONArray(prefs.getString(KEY_SOURCES, "[]"));
-            for (int index = 0; index < array.length(); index++) {
-                MediaSource source = MediaSource.fromJson(array.getJSONObject(index));
-                if (source.id.length() > 0 && source.name.length() > 0 && source.url.length() > 0) {
-                    sources.add(source);
-                }
-            }
-        } catch (JSONException ignored) {
+        List<MediaSource> sources = readRawSources();
+        if (sources.isEmpty()) {
+            sources = defaultSources();
+            writeSources(sources);
         }
         return sources;
     }
 
     public void writeSources(List<MediaSource> sources) {
         JSONArray array = new JSONArray();
-        for (MediaSource source : sources) {
-            try {
-                array.put(source.toJson());
-            } catch (JSONException ignored) {
+        if (sources != null) {
+            for (MediaSource source : sources) {
+                try {
+                    array.put(source.toJson());
+                } catch (JSONException ignored) {
+                }
             }
         }
         prefs.edit().putString(KEY_SOURCES, array.toString()).apply();
     }
 
     public String readActiveSourceId() {
-        List<MediaSource> sources = readSources();
         String activeSourceId = prefs.getString(KEY_ACTIVE_SOURCE_ID, null);
-        for (MediaSource source : sources) {
-            if (source.id.equals(activeSourceId)) {
-                return activeSourceId;
-            }
+        if (activeSourceId != null && activeSourceId.length() > 0) {
+            return activeSourceId;
         }
-        return sources.isEmpty() ? null : sources.get(0).id;
+        return DEFAULT_SOURCE_ID;
     }
 
     public void writeActiveSourceId(String sourceId) {
-        prefs.edit().putString(KEY_ACTIVE_SOURCE_ID, sourceId).apply();
+        prefs.edit().putString(KEY_ACTIVE_SOURCE_ID, sourceId != null ? sourceId : DEFAULT_SOURCE_ID).apply();
     }
 
     public String readActiveCategoryKey(String sourceId) {
@@ -100,15 +93,12 @@ public class SourceStore {
     }
 
     public Map<String, Integer> readCounts() {
-        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, Integer> counts = new HashMap<>();
         try {
             JSONObject json = new JSONObject(prefs.getString(KEY_SOURCE_COUNTS, "{}"));
-            JSONArray keys = json.names();
-            if (keys == null) {
-                return counts;
-            }
-            for (int index = 0; index < keys.length(); index++) {
-                String key = keys.getString(index);
+            Iterator<String> keys = json.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
                 counts.put(key, json.optInt(key, 0));
             }
         } catch (JSONException ignored) {
@@ -117,6 +107,9 @@ public class SourceStore {
     }
 
     public void writeCount(String sourceId, int count) {
+        if (sourceId == null || sourceId.length() == 0) {
+            return;
+        }
         Map<String, Integer> counts = readCounts();
         counts.put(sourceId, count);
         JSONObject json = new JSONObject();
@@ -130,45 +123,45 @@ public class SourceStore {
     }
 
     public SourceListResult readCachedSource(String sourceId) {
-        String rawJson = prefs.getString(KEY_SOURCE_CACHE_PREFIX + sourceId, null);
-        if (rawJson == null || rawJson.length() == 0) {
+        if (sourceId == null || sourceId.length() == 0) {
             return null;
         }
-
+        String raw = prefs.getString(KEY_SOURCE_CACHE_PREFIX + sourceId, null);
+        if (raw == null || raw.length() == 0) {
+            return null;
+        }
         try {
-            return SourceListResult.fromJson(rawJson);
+            return SourceListResult.fromJson(new JSONObject(raw));
         } catch (JSONException ignored) {
             return null;
         }
     }
 
     public void writeCachedSource(String sourceId, SourceListResult result) {
-        if (result.rawJson == null || result.rawJson.length() == 0) {
+        if (sourceId == null || sourceId.length() == 0 || result == null) {
             return;
         }
-        prefs.edit()
-            .putString(KEY_SOURCE_CACHE_PREFIX + sourceId, result.rawJson)
-            .apply();
+        try {
+            prefs.edit().putString(KEY_SOURCE_CACHE_PREFIX + sourceId, result.toJson().toString()).apply();
+        } catch (JSONException ignored) {
+        }
     }
 
     public void clearCachedSource(String sourceId) {
+        if (sourceId == null || sourceId.length() == 0) {
+            return;
+        }
         prefs.edit().remove(KEY_SOURCE_CACHE_PREFIX + sourceId).apply();
     }
 
     public void removeSourceData(String sourceId) {
-        Map<String, Integer> counts = readCounts();
-        counts.remove(sourceId);
-        JSONObject json = new JSONObject();
-        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
-            try {
-                json.put(entry.getKey(), entry.getValue());
-            } catch (JSONException ignored) {
-            }
+        if (sourceId == null || sourceId.length() == 0) {
+            return;
         }
+        clearCachedSource(sourceId);
         prefs.edit()
-            .remove(KEY_SOURCE_CACHE_PREFIX + sourceId)
             .putString(KEY_ACTIVE_CATEGORIES, removeJsonKey(prefs.getString(KEY_ACTIVE_CATEGORIES, "{}"), sourceId))
-            .putString(KEY_SOURCE_COUNTS, json.toString())
+            .putString(KEY_SOURCE_COUNTS, removeJsonKey(prefs.getString(KEY_SOURCE_COUNTS, "{}"), sourceId))
             .apply();
     }
 
@@ -184,47 +177,42 @@ public class SourceStore {
 
     private void ensureDefaultSources() {
         List<MediaSource> sources = readRawSources();
-        if (migrateKnownSourceUrls(sources)) {
-            writeSources(sources);
+        boolean changed = migrateKnownSourceUrls(sources);
+        
+        boolean hasSoco = false;
+        for (MediaSource s : sources) {
+            if (DEFAULT_SOURCE_ID.equals(s.id)) {
+                hasSoco = true;
+                break;
+            }
         }
-        if (!sources.isEmpty()) {
-            boolean hasSoco = false;
-            for (MediaSource s : sources) {
-                if ("seed-socolive".equals(s.id)) {
-                    hasSoco = true;
-                    break;
-                }
-            }
-            if (!hasSoco) {
-                sources.add(0, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
-                writeSources(sources);
-                writeActiveSourceId("seed-socolive");
-            }
-            return;
+        if (!hasSoco) {
+            sources.add(0, new MediaSource(DEFAULT_SOURCE_ID, "Socolive Trực Tiếp", "socolive://live"));
+            changed = true;
         }
 
-        sources = defaultSources();
-        writeSources(sources);
-        if (!sources.isEmpty()) {
-            writeActiveSourceId(sources.get(0).id);
+        if (changed || sources.isEmpty()) {
+            if (sources.isEmpty()) {
+                sources = defaultSources();
+            }
+            writeSources(sources);
+            writeActiveSourceId(DEFAULT_SOURCE_ID);
         }
     }
 
     private boolean migrateKnownSourceUrls(List<MediaSource> sources) {
         boolean changed = false;
-        boolean hasSoco = false;
 
         // Purge dead built-in seeds
         for (int index = sources.size() - 1; index >= 0; index--) {
             MediaSource source = sources.get(index);
-            if (source.id.startsWith("seed-") && !"seed-socolive".equals(source.id)) {
+            if (source.id.startsWith("seed-") && !DEFAULT_SOURCE_ID.equals(source.id)) {
                 clearCachedSource(source.id);
                 sources.remove(index);
                 changed = true;
-            } else if ("seed-socolive".equals(source.id)) {
-                hasSoco = true;
+            } else if (DEFAULT_SOURCE_ID.equals(source.id)) {
                 if (!"socolive://live".equals(source.url)) {
-                    sources.set(index, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
+                    sources.set(index, new MediaSource(DEFAULT_SOURCE_ID, "Socolive Trực Tiếp", "socolive://live"));
                     clearCachedSource(source.id);
                     changed = true;
                 }
@@ -242,20 +230,7 @@ public class SourceStore {
             }
         }
 
-        if (!hasSoco) {
-            sources.add(0, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
-            changed = true;
-        }
-
-        if (changed || readActiveSourceId() == null) {
-            writeActiveSourceId("seed-socolive");
-        }
-
         return changed;
-    }
-
-    private String normalizeComparableUrl(String sourceUrl) {
-        return sourceUrl == null ? "" : sourceUrl.trim().toLowerCase();
     }
 
     private String migrateKnownSourceUrl(String sourceUrl) {
@@ -299,7 +274,7 @@ public class SourceStore {
 
     public static List<MediaSource> defaultSources() {
         List<MediaSource> sources = new ArrayList<>();
-        sources.add(new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
+        sources.add(new MediaSource(DEFAULT_SOURCE_ID, "Socolive Trực Tiếp", "socolive://live"));
         return sources;
     }
 }

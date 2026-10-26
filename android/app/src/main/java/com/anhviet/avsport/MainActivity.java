@@ -107,34 +107,49 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        try {
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        sourceStore = new SourceStore(this);
-        sources = sourceStore.readSources();
-        sourceCounts = sourceStore.readCounts();
-        activeSourceId = sourceStore.readActiveSourceId();
-        activeCategoryKey = sourceStore.readActiveCategoryKey(activeSourceId);
-
-        for (MediaSource source : sources) {
-            SourceListResult cached = sourceStore.readCachedSource(source.id);
-            if (cached != null) {
-                sourceCache.put(source.id, cached);
-                sourceCounts.put(source.id, activeItemCount(cached));
+            sourceStore = new SourceStore(this);
+            sources = sourceStore.readSources();
+            if (sources == null || sources.isEmpty()) {
+                sources = SourceStore.defaultSources();
             }
-        }
+            sourceCounts = sourceStore.readCounts();
+            activeSourceId = sourceStore.readActiveSourceId();
+            if (activeSourceId == null || activeSourceId.length() == 0) {
+                activeSourceId = SourceStore.DEFAULT_SOURCE_ID;
+            }
+            activeCategoryKey = sourceStore.readActiveCategoryKey(activeSourceId);
 
-        buildLayout();
-        renderAll();
-        rootContent.post(this::focusActiveCategory);
-        preloadAllSources();
+            for (MediaSource source : sources) {
+                SourceListResult cached = sourceStore.readCachedSource(source.id);
+                if (cached != null) {
+                    sourceCache.put(source.id, cached);
+                    sourceCounts.put(source.id, activeItemCount(cached));
+                }
+            }
+
+            buildLayout();
+            renderAll();
+            rootContent.post(this::focusActiveCategory);
+            preloadAllSources();
+        } catch (Throwable t) {
+            android.util.Log.e("AVSport", "Error in onCreate", t);
+            Toast.makeText(this, "Lỗi khởi động: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        silentRefreshActiveSource();
-        startAutoRefreshTimer();
+        try {
+            silentRefreshActiveSource();
+            startAutoRefreshTimer();
+        } catch (Throwable t) {
+            android.util.Log.e("AVSport", "Error in onResume", t);
+        }
     }
 
     @Override
@@ -717,11 +732,18 @@ public class MainActivity extends Activity {
     }
 
     private void openPlayer(MediaCard item) {
-        Intent intent = new Intent(this, PlayerActivity.class);
-        intent.putExtra(EXTRA_CARD_PAGE_URL, item.pageUrl);
-        intent.putExtra(EXTRA_CARD_TITLE, item.displayTitle());
-        intent.putStringArrayListExtra(EXTRA_CARD_FALLBACK_URLS, collectFallbackUrls(item));
-        startActivity(intent);
+        if (item == null) {
+            return;
+        }
+        try {
+            Intent intent = new Intent(this, PlayerActivity.class);
+            intent.putExtra(EXTRA_CARD_PAGE_URL, item.pageUrl);
+            intent.putExtra(EXTRA_CARD_TITLE, item.displayTitle());
+            intent.putStringArrayListExtra(EXTRA_CARD_FALLBACK_URLS, collectFallbackUrls(item));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Không thể mở luồng phát: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private ArrayList<String> collectFallbackUrls(MediaCard selectedItem) {
@@ -1128,14 +1150,16 @@ public class MainActivity extends Activity {
     }
 
     private MediaSource findSource(String sourceId) {
-        if (sourceId == null) {
-            return null;
-        }
-        for (MediaSource source : sources) {
-            if (source.id.equals(sourceId)) {
-                return source;
+        if (sourceId != null && sources != null) {
+            for (MediaSource source : sources) {
+                if (source.id.equals(sourceId)) {
+                    return source;
+                }
             }
         }
-        return null;
+        if (sources != null && !sources.isEmpty()) {
+            return sources.get(0);
+        }
+        return new MediaSource(SourceStore.DEFAULT_SOURCE_ID, "Socolive Trực Tiếp", "socolive://live");
     }
 }
