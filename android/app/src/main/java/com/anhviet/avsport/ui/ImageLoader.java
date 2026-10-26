@@ -43,6 +43,10 @@ public class ImageLoader {
         });
     }
 
+    public void bind(ImageView target, String url) {
+        load(target, url);
+    }
+
     private Bitmap fetch(String url) {
         HttpURLConnection connection = null;
         try {

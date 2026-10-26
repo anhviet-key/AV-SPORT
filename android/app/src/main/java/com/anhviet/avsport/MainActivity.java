@@ -712,7 +712,7 @@ public class MainActivity extends Activity {
                 return;
             }
             view.setVisibility(View.VISIBLE);
-            imageLoader.bind(view, apiClient.toAbsoluteUrl(url));
+            imageLoader.load(view, apiClient.toAbsoluteUrl(url));
         }
     }
 
