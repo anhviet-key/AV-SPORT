@@ -1,5 +1,6 @@
 package com.anhviet.avsport.model;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 public class StreamOption {
@@ -13,5 +14,15 @@ public class StreamOption {
 
     public static StreamOption fromJson(JSONObject json) {
         return new StreamOption(json.optInt("index", 0), json.optString("label"));
+    }
+
+    public JSONObject toJson() {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("index", index);
+            json.put("label", label);
+        } catch (JSONException ignored) {
+        }
+        return json;
     }
 }

@@ -194,6 +194,18 @@ public class SourceStore {
             writeSources(sources);
         }
         if (!sources.isEmpty()) {
+            boolean hasSoco = false;
+            for (MediaSource s : sources) {
+                if ("seed-socolive".equals(s.id)) {
+                    hasSoco = true;
+                    break;
+                }
+            }
+            if (!hasSoco) {
+                sources.add(0, new MediaSource("seed-socolive", "Socolive", "socolive://live"));
+                writeSources(sources);
+                writeActiveSourceId("seed-socolive");
+            }
             return;
         }
 
@@ -242,6 +254,7 @@ public class SourceStore {
             if (changed) {
                 sources.clear();
                 sources.addAll(nextSources);
+                writeActiveSourceId("seed-socolive");
             }
             return changed;
         }
@@ -288,6 +301,9 @@ public class SourceStore {
     private String migrateKnownSourceUrl(String sourceUrl) {
         if (sourceUrl == null) {
             return "";
+        }
+        if (sourceUrl.contains("s2sprediction.net") || sourceUrl.contains("socolive")) {
+            return "socolive://live";
         }
         String migrated = sourceUrl
             .replace("https://xoilaccs.tv/", "https://xoilacch.tv/")
@@ -338,9 +354,9 @@ public class SourceStore {
 
     public static List<MediaSource> defaultSources() {
         List<MediaSource> sources = new ArrayList<>();
+        sources.add(new MediaSource("seed-socolive", "Socolive", "socolive://live"));
         sources.add(new MediaSource("seed-xoilacch", "XoilacCH", "https://xoilacch.tv/"));
         sources.add(new MediaSource("seed-90phutcs", "90PhutCS", "https://90phutcs.tv/"));
-        sources.add(new MediaSource("seed-socolive", "Socolive", "https://s2sprediction.net/"));
         sources.add(new MediaSource("seed-xoilac365", "Xoilac365", "https://xoilacct.tv/"));
         sources.add(new MediaSource("seed-xoilacz", "XoilacZ", "https://xoilacz.tv/"));
         sources.add(new MediaSource("seed-thapcamtv", "ThapcamTV", "https://my-no-no.com/"));

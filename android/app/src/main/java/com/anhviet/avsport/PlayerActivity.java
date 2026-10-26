@@ -386,7 +386,9 @@ public class PlayerActivity extends Activity {
             button.setTag(option.index);
             stylePlayerButton(button, active);
             button.setOnClickListener(view -> loadStream(option.index, true));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(Ui.dp(this, 140), Ui.dp(this, 56));
+            button.setMinWidth(Ui.dp(this, 140));
+            button.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), 0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, Ui.dp(this, 56));
             params.setMargins(0, 0, Ui.dp(this, 12), 0);
             streamRow.addView(button, params);
         }
@@ -394,7 +396,9 @@ public class PlayerActivity extends Activity {
         Button external = actionButton("Mở ngoài");
         stylePlayerButton(external, false);
         external.setOnClickListener(view -> openExternal());
-        LinearLayout.LayoutParams externalParams = new LinearLayout.LayoutParams(Ui.dp(this, 150), Ui.dp(this, 56));
+        external.setMinWidth(Ui.dp(this, 140));
+        external.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), 0);
+        LinearLayout.LayoutParams externalParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 56));
         externalParams.setMargins(Ui.dp(this, 6), 0, 0, 0);
         streamRow.addView(external, externalParams);
     }

@@ -1220,9 +1220,17 @@ public class MainActivity extends Activity {
         if (result == null) {
             return items;
         }
-        if (activeCategoryKey == null) {
+        if (activeCategoryKey == null || "tat-ca".equals(activeCategoryKey) || "all".equals(activeCategoryKey)) {
             for (MediaCard item : result.items) {
                 if (!item.isEnded()) {
+                    items.add(item);
+                }
+            }
+            return items;
+        }
+        if ("truc-tiep".equals(activeCategoryKey) || "live".equals(activeCategoryKey)) {
+            for (MediaCard item : result.items) {
+                if (!item.isEnded() && isItemLive(item)) {
                     items.add(item);
                 }
             }
@@ -1254,12 +1262,35 @@ public class MainActivity extends Activity {
         if (result == null || categoryKey == null) {
             return count;
         }
+        if ("tat-ca".equals(categoryKey) || "all".equals(categoryKey)) {
+            for (MediaCard item : result.items) {
+                if (!item.isEnded()) {
+                    count++;
+                }
+            }
+            return count;
+        }
+        if ("truc-tiep".equals(categoryKey) || "live".equals(categoryKey)) {
+            for (MediaCard item : result.items) {
+                if (!item.isEnded() && isItemLive(item)) {
+                    count++;
+                }
+            }
+            return count;
+        }
         for (MediaCard item : result.items) {
             if (!item.isEnded() && categoryKey.equals(item.sportKey)) {
                 count++;
             }
         }
         return count;
+    }
+
+    private static boolean isItemLive(MediaCard item) {
+        if (item == null) return false;
+        String status = item.displayStatus().toLowerCase(Locale.ROOT);
+        String label = item.statusLabel != null ? item.statusLabel.toLowerCase(Locale.ROOT) : "";
+        return status.contains("live") || status.contains("trực") || label.contains("trực") || label.contains("live");
     }
 
     private MediaSource findSource(String sourceId) {
