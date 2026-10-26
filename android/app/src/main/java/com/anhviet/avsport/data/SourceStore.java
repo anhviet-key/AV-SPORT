@@ -44,7 +44,6 @@ public class SourceStore {
                 }
             }
         } catch (JSONException ignored) {
-            // Invalid preferences are repaired by ensureDefaultSources on next write.
         }
         return sources;
     }
@@ -55,7 +54,6 @@ public class SourceStore {
             try {
                 array.put(source.toJson());
             } catch (JSONException ignored) {
-                // Skip invalid source.
             }
         }
         prefs.edit().putString(KEY_SOURCES, array.toString()).apply();
@@ -98,7 +96,6 @@ public class SourceStore {
             json.put(sourceId, categoryKey);
             prefs.edit().putString(KEY_ACTIVE_CATEGORIES, json.toString()).apply();
         } catch (JSONException ignored) {
-            // Ignore broken category state; it will be rebuilt from user navigation.
         }
     }
 
@@ -115,7 +112,6 @@ public class SourceStore {
                 counts.put(key, json.optInt(key, 0));
             }
         } catch (JSONException ignored) {
-            // Broken count data is treated as empty.
         }
         return counts;
     }
@@ -128,7 +124,6 @@ public class SourceStore {
             try {
                 json.put(entry.getKey(), entry.getValue());
             } catch (JSONException ignored) {
-                // Skip invalid count.
             }
         }
         prefs.edit().putString(KEY_SOURCE_COUNTS, json.toString()).apply();
@@ -168,7 +163,6 @@ public class SourceStore {
             try {
                 json.put(entry.getKey(), entry.getValue());
             } catch (JSONException ignored) {
-                // Skip invalid count.
             }
         }
         prefs.edit()
@@ -202,7 +196,7 @@ public class SourceStore {
                 }
             }
             if (!hasSoco) {
-                sources.add(0, new MediaSource("seed-socolive", "Socolive", "socolive://live"));
+                sources.add(0, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
                 writeSources(sources);
                 writeActiveSourceId("seed-socolive");
             }
@@ -217,81 +211,47 @@ public class SourceStore {
     }
 
     private boolean migrateKnownSourceUrls(List<MediaSource> sources) {
-        boolean hasBundledSeed = false;
-        for (MediaSource source : sources) {
-            if (source.id.startsWith("seed-")) {
-                hasBundledSeed = true;
-                break;
-            }
-        }
-
-        if (hasBundledSeed) {
-            List<MediaSource> nextSources = new ArrayList<>(defaultSources());
-            Set<String> seenUrls = new HashSet<>();
-            for (MediaSource source : nextSources) {
-                seenUrls.add(normalizeComparableUrl(source.url));
-            }
-
-            for (MediaSource source : sources) {
-                if (source.id.startsWith("seed-")) {
-                    clearCachedSource(source.id);
-                    continue;
-                }
-
-                String migratedUrl = migrateKnownSourceUrl(source.url);
-                if (migratedUrl.length() == 0 || seenUrls.contains(normalizeComparableUrl(migratedUrl))) {
-                    continue;
-                }
-
-                nextSources.add(new MediaSource(source.id, source.name, migratedUrl));
-                seenUrls.add(normalizeComparableUrl(migratedUrl));
-                if (!migratedUrl.equals(source.url)) {
-                    clearCachedSource(source.id);
-                }
-            }
-
-            boolean changed = !sameSources(sources, nextSources);
-            if (changed) {
-                sources.clear();
-                sources.addAll(nextSources);
-                writeActiveSourceId("seed-socolive");
-            }
-            return changed;
-        }
-
         boolean changed = false;
+        boolean hasSoco = false;
+
+        // Purge dead built-in seeds
         for (int index = sources.size() - 1; index >= 0; index--) {
             MediaSource source = sources.get(index);
-            String migratedUrl = migrateKnownSourceUrl(source.url);
-            if (migratedUrl.length() == 0) {
+            if (source.id.startsWith("seed-") && !"seed-socolive".equals(source.id)) {
                 clearCachedSource(source.id);
                 sources.remove(index);
                 changed = true;
-                continue;
-            }
-            if (!migratedUrl.equals(source.url)) {
-                sources.set(index, new MediaSource(source.id, source.name, migratedUrl));
-                clearCachedSource(source.id);
-                changed = true;
+            } else if ("seed-socolive".equals(source.id)) {
+                hasSoco = true;
+                if (!"socolive://live".equals(source.url)) {
+                    sources.set(index, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
+                    clearCachedSource(source.id);
+                    changed = true;
+                }
+            } else {
+                String migratedUrl = migrateKnownSourceUrl(source.url);
+                if (migratedUrl.length() == 0) {
+                    clearCachedSource(source.id);
+                    sources.remove(index);
+                    changed = true;
+                } else if (!migratedUrl.equals(source.url)) {
+                    sources.set(index, new MediaSource(source.id, source.name, migratedUrl));
+                    clearCachedSource(source.id);
+                    changed = true;
+                }
             }
         }
-        return changed;
-    }
 
-    private boolean sameSources(List<MediaSource> left, List<MediaSource> right) {
-        if (left.size() != right.size()) {
-            return false;
+        if (!hasSoco) {
+            sources.add(0, new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
+            changed = true;
         }
-        for (int index = 0; index < left.size(); index++) {
-            MediaSource leftSource = left.get(index);
-            MediaSource rightSource = right.get(index);
-            if (!leftSource.id.equals(rightSource.id)
-                || !leftSource.name.equals(rightSource.name)
-                || !leftSource.url.equals(rightSource.url)) {
-                return false;
-            }
+
+        if (changed || readActiveSourceId() == null) {
+            writeActiveSourceId("seed-socolive");
         }
-        return true;
+
+        return changed;
     }
 
     private String normalizeComparableUrl(String sourceUrl) {
@@ -305,31 +265,17 @@ public class SourceStore {
         if (sourceUrl.contains("s2sprediction.net") || sourceUrl.contains("socolive")) {
             return "socolive://live";
         }
-        String migrated = sourceUrl
-            .replace("https://xoilaccs.tv/", "https://xoilacch.tv/")
-            .replace("http://xoilaccs.tv/", "https://xoilacch.tv/")
-            .replace("https://www.xoilaccs.tv/", "https://xoilacch.tv/")
-            .replace("http://www.xoilaccs.tv/", "https://xoilacch.tv/")
-            .replace("https://xoilaccq.tv/", "https://xoilacch.tv/")
-            .replace("http://xoilaccq.tv/", "https://xoilacch.tv/")
-            .replace("https://www.xoilaccq.tv/", "https://xoilacch.tv/")
-            .replace("http://www.xoilaccq.tv/", "https://xoilacch.tv/")
-            .replace("https://90phutck.tv/", "https://90phutcs.tv/")
-            .replace("http://90phutck.tv/", "https://90phutcs.tv/")
-            .replace("https://www.90phutck.tv/", "https://90phutcs.tv/")
-            .replace("http://www.90phutck.tv/", "https://90phutcs.tv/");
-
-        if (isKnownDeadSourceUrl(migrated)) {
+        if (isKnownDeadSourceUrl(sourceUrl)) {
             return "";
         }
-        return migrated;
+        return sourceUrl;
     }
 
     private boolean isKnownDeadSourceUrl(String sourceUrl) {
         if (sourceUrl == null || sourceUrl.isEmpty()) {
             return false;
         }
-        return sourceUrl.matches("(?i)https?://(www\\.)?(sensorrx\\.io|qlick\\.io|perguidex\\.io|cakhiazkz\\.cc|bunchatv\\d*\\.net|thapcam24h\\.net|lithiumvalleycommunitycoalition\\.org)/?");
+        return sourceUrl.matches("(?i)https?://(www\\.)?(sensorrx\\.io|qlick\\.io|perguidex\\.io|cakhiazkz\\.cc|bunchatv\\d*\\.net|thapcam24h\\.net|lithiumvalleycommunitycoalition\\.org|xoilac.*|90phut.*|gavang.*)/?");
     }
 
     private List<MediaSource> readRawSources() {
@@ -347,20 +293,13 @@ public class SourceStore {
                 }
             }
         } catch (JSONException ignored) {
-            // Invalid preferences will be replaced with default sources.
         }
         return sources;
     }
 
     public static List<MediaSource> defaultSources() {
         List<MediaSource> sources = new ArrayList<>();
-        sources.add(new MediaSource("seed-socolive", "Socolive", "socolive://live"));
-        sources.add(new MediaSource("seed-xoilacch", "XoilacCH", "https://xoilacch.tv/"));
-        sources.add(new MediaSource("seed-90phutcs", "90PhutCS", "https://90phutcs.tv/"));
-        sources.add(new MediaSource("seed-xoilac365", "Xoilac365", "https://xoilacct.tv/"));
-        sources.add(new MediaSource("seed-xoilacz", "XoilacZ", "https://xoilacz.tv/"));
-        sources.add(new MediaSource("seed-thapcamtv", "ThapcamTV", "https://my-no-no.com/"));
-        sources.add(new MediaSource("seed-gavang", "Gavang", "https://gavanglink.tv/"));
+        sources.add(new MediaSource("seed-socolive", "Socolive Trực Tiếp", "socolive://live"));
         return sources;
     }
 }

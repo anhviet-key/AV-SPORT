@@ -6,6 +6,8 @@ import android.content.Intent;
 import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.View;
@@ -20,9 +22,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MimeTypes;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
+import androidx.media3.datasource.DefaultHttpDataSource;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory;
 import androidx.media3.ui.AspectRatioFrameLayout;
 import androidx.media3.ui.PlayerView;
 
@@ -36,7 +41,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class PlayerActivity extends Activity {
-    private static final int MAX_AUTO_STREAM_INDEX = 8;
     private static final int[] ZOOM_MODES = {
         AspectRatioFrameLayout.RESIZE_MODE_FIT,
         AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
@@ -46,6 +50,8 @@ public class PlayerActivity extends Activity {
 
     private final ApiClient apiClient = new ApiClient();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler overlayHandler = new Handler(Looper.getMainLooper());
+    private final Runnable hideOverlayRunnable = () -> setOverlayVisible(false);
 
     private ExoPlayer player;
     private PlayerView playerView;
@@ -71,32 +77,40 @@ public class PlayerActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        try {
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        pageUrl = getIntent().getStringExtra(MainActivity.EXTRA_CARD_PAGE_URL);
-        ArrayList<String> extras = getIntent().getStringArrayListExtra(MainActivity.EXTRA_CARD_FALLBACK_URLS);
-        if (extras != null) {
-            fallbackPageUrls.addAll(extras);
-        }
-        if (pageUrl != null && pageUrl.length() > 0 && !fallbackPageUrls.contains(pageUrl)) {
-            fallbackPageUrls.add(0, pageUrl);
-        }
-        title = getIntent().getStringExtra(MainActivity.EXTRA_CARD_TITLE);
-        if (title == null || title.length() == 0) {
-            title = "Trực tiếp";
-        }
+            pageUrl = getIntent().getStringExtra(MainActivity.EXTRA_CARD_PAGE_URL);
+            ArrayList<String> extras = getIntent().getStringArrayListExtra(MainActivity.EXTRA_CARD_FALLBACK_URLS);
+            if (extras != null) {
+                fallbackPageUrls.addAll(extras);
+            }
+            if (pageUrl != null && pageUrl.length() > 0 && !fallbackPageUrls.contains(pageUrl)) {
+                fallbackPageUrls.add(0, pageUrl);
+            }
+            title = getIntent().getStringExtra(MainActivity.EXTRA_CARD_TITLE);
+            if (title == null || title.length() == 0) {
+                title = "Trực tiếp";
+            }
 
-        buildLayout();
-        loadStream(0, true);
+            buildLayout();
+            loadStream(0, true);
+        } catch (Exception e) {
+            Toast.makeText(this, "Lỗi mở trình phát: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            finish();
+        }
     }
 
     @Override
     protected void onDestroy() {
+        overlayHandler.removeCallbacks(hideOverlayRunnable);
         executor.shutdownNow();
         if (player != null) {
-            player.release();
+            try {
+                player.release();
+            } catch (Exception ignored) {
+            }
         }
         super.onDestroy();
     }
@@ -118,6 +132,7 @@ public class PlayerActivity extends Activity {
         }
 
         if (overlayVisible) {
+            resetOverlayTimer();
             if (isConfirmKey(keyCode) && getCurrentFocus() == overlay) {
                 setOverlayVisible(false);
                 return true;
@@ -165,10 +180,20 @@ public class PlayerActivity extends Activity {
         root.setBackgroundColor(android.graphics.Color.BLACK);
         setContentView(root);
 
+        DefaultHttpDataSource.Factory dataSourceFactory = new DefaultHttpDataSource.Factory()
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(30000)
+            .setAllowCrossProtocolRedirects(true);
+
         playerView = new PlayerView(this);
         playerView.setUseController(false);
         playerView.setResizeMode(ZOOM_MODES[zoomModeIndex]);
-        player = new ExoPlayer.Builder(this).build();
+
+        player = new ExoPlayer.Builder(this)
+            .setMediaSourceFactory(new DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory))
+            .build();
+
         player.addListener(new Player.Listener() {
             @Override
             public void onPlayerError(PlaybackException error) {
@@ -185,7 +210,7 @@ public class PlayerActivity extends Activity {
         overlay = new FrameLayout(this);
         overlay.setFocusable(true);
         overlay.setClickable(true);
-        overlay.setBackgroundColor(0x3302070D);
+        overlay.setBackgroundColor(0x5502070D);
         overlay.setOnClickListener(view -> setOverlayVisible(false));
         root.addView(overlay, new FrameLayout.LayoutParams(-1, -1));
 
@@ -199,7 +224,7 @@ public class PlayerActivity extends Activity {
         top.setGravity(Gravity.CENTER_VERTICAL);
         Button back = actionButton("Quay lại");
         back.setOnClickListener(view -> finish());
-        top.addView(back, new LinearLayout.LayoutParams(Ui.dp(this, 150), Ui.dp(this, 58)));
+        top.addView(back, new LinearLayout.LayoutParams(Ui.dp(this, 150), Ui.dp(this, 56)));
 
         titleView = Ui.text(this, title, 24, Ui.TEXT, Typeface.BOLD);
         titleView.setSingleLine(true);
@@ -210,14 +235,14 @@ public class PlayerActivity extends Activity {
         hideButton = actionButton("Ẩn điều khiển");
         hideButton.setOnClickListener(view -> setOverlayVisible(false));
         styleControlButton(hideButton, Ui.GREEN);
-        LinearLayout.LayoutParams hideParams = new LinearLayout.LayoutParams(Ui.dp(this, 180), Ui.dp(this, 58));
+        LinearLayout.LayoutParams hideParams = new LinearLayout.LayoutParams(Ui.dp(this, 170), Ui.dp(this, 56));
         hideParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
         top.addView(hideButton, hideParams);
 
         zoomButton = actionButton("Khung hình: " + ZOOM_LABELS[zoomModeIndex]);
         zoomButton.setOnClickListener(view -> changeZoom(1));
         styleControlButton(zoomButton, Ui.CARD_FOCUS);
-        LinearLayout.LayoutParams zoomParams = new LinearLayout.LayoutParams(Ui.dp(this, 230), Ui.dp(this, 58));
+        LinearLayout.LayoutParams zoomParams = new LinearLayout.LayoutParams(Ui.dp(this, 220), Ui.dp(this, 56));
         zoomParams.setMargins(Ui.dp(this, 12), 0, 0, 0);
         top.addView(zoomButton, zoomParams);
 
@@ -228,7 +253,7 @@ public class PlayerActivity extends Activity {
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
-        bottom.setPadding(Ui.dp(this, 20), Ui.dp(this, 18), Ui.dp(this, 20), Ui.dp(this, 18));
+        bottom.setPadding(Ui.dp(this, 20), Ui.dp(this, 16), Ui.dp(this, 20), Ui.dp(this, 16));
         bottom.setBackground(Ui.rounded(Ui.PANEL, 18, 1, Ui.BORDER_SOFT, this));
         controls.addView(bottom, new LinearLayout.LayoutParams(-1, -2));
 
@@ -241,8 +266,8 @@ public class PlayerActivity extends Activity {
         HorizontalScrollView streamScroller = new HorizontalScrollView(this);
         streamScroller.setHorizontalScrollBarEnabled(false);
         streamScroller.addView(streamRow, new HorizontalScrollView.LayoutParams(-2, -1));
-        LinearLayout.LayoutParams streamParams = new LinearLayout.LayoutParams(-1, Ui.dp(this, 66));
-        streamParams.setMargins(0, Ui.dp(this, 12), 0, 0);
+        LinearLayout.LayoutParams streamParams = new LinearLayout.LayoutParams(-1, Ui.dp(this, 64));
+        streamParams.setMargins(0, Ui.dp(this, 10), 0, 0);
         bottom.addView(streamScroller, streamParams);
 
         setOverlayVisible(false);
@@ -288,6 +313,16 @@ public class PlayerActivity extends Activity {
         overlay.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (visible) {
             overlay.post(this::focusSelectedStreamButton);
+            resetOverlayTimer();
+        } else {
+            overlayHandler.removeCallbacks(hideOverlayRunnable);
+        }
+    }
+
+    private void resetOverlayTimer() {
+        overlayHandler.removeCallbacks(hideOverlayRunnable);
+        if (overlayVisible) {
+            overlayHandler.postDelayed(hideOverlayRunnable, 4500);
         }
     }
 
@@ -313,6 +348,9 @@ public class PlayerActivity extends Activity {
         executor.execute(() -> {
             try {
                 StreamResult stream = apiClient.fetchStream(pageUrl, requestedIndex);
+                if (stream == null) {
+                    throw new IllegalStateException("Không tìm thấy dữ liệu luồng.");
+                }
                 String playbackUrl = apiClient.toAbsoluteUrl(stream.bestUrl());
                 runOnUiThread(() -> playStream(stream, playbackUrl, requestedIndex));
             } catch (Exception error) {
@@ -326,7 +364,7 @@ public class PlayerActivity extends Activity {
         selectedStreamIndex = stream.selectedStreamIndex > 0 ? stream.selectedStreamIndex : requestedIndex;
         lastPlaybackUrl = playbackUrl;
         if (playbackUrl == null || playbackUrl.length() == 0) {
-            handleStreamError("Luồng rỗng.", true);
+            handleStreamError("Luồng rỗng.", false);
             return;
         }
         titleView.setText(stream.title == null || stream.title.length() == 0 ? title : stream.title);
@@ -334,18 +372,27 @@ public class PlayerActivity extends Activity {
         progressBar.setVisibility(View.GONE);
         errorView.setVisibility(View.GONE);
 
-        player.stop();
-        player.clearMediaItems();
-        player.setMediaItem(MediaItem.fromUri(playbackUrl));
-        player.prepare();
-        player.setPlayWhenReady(true);
+        try {
+            player.stop();
+            player.clearMediaItems();
+            MediaItem mediaItem = new MediaItem.Builder()
+                .setUri(playbackUrl)
+                .setMimeType(playbackUrl.contains(".flv") ? null : MimeTypes.APPLICATION_M3U8)
+                .build();
+            player.setMediaItem(mediaItem);
+            player.prepare();
+            player.setPlayWhenReady(true);
+        } catch (Exception e) {
+            handleStreamError("Lỗi phát video: " + e.getMessage(), false);
+        }
     }
 
     private void handleStreamError(String message, boolean autoRetry) {
         progressBar.setVisibility(View.GONE);
-        int knownMaxIndex = currentStream == null ? MAX_AUTO_STREAM_INDEX : Math.max(MAX_AUTO_STREAM_INDEX, currentStream.options.size() - 1);
-        if (autoRetry && selectedStreamIndex < knownMaxIndex) {
-            loadStream(selectedStreamIndex + 1, true);
+        if (autoRetry && currentStream != null && selectedStreamIndex < currentStream.options.size() - 1) {
+            int next = selectedStreamIndex + 1;
+            Toast.makeText(this, "Đang thử BLV tiếp theo...", Toast.LENGTH_SHORT).show();
+            loadStream(next, false);
             return;
         }
 
@@ -356,7 +403,7 @@ public class PlayerActivity extends Activity {
         errorView.setVisibility(View.VISIBLE);
         errorView.setText("Không phát được luồng này. " + (message == null ? "" : message));
         setOverlayVisible(true);
-        Toast.makeText(this, "Không phát được luồng hiện tại.", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "Không phát được luồng này. Vui lòng bấm phím Trái/Phải để đổi BLV khác.", Toast.LENGTH_LONG).show();
     }
 
     private boolean switchToNextFallbackPage() {
@@ -369,7 +416,7 @@ public class PlayerActivity extends Activity {
         selectedStreamIndex = 0;
         currentStream = null;
         lastPlaybackUrl = null;
-        Toast.makeText(this, "Đang thử nguồn dự phòng " + (fallbackPageIndex + 1) + "/" + fallbackPageUrls.size(), Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Đang thử kênh dự phòng " + (fallbackPageIndex + 1) + "/" + fallbackPageUrls.size(), Toast.LENGTH_SHORT).show();
         loadStream(0, true);
         return true;
     }
@@ -385,20 +432,23 @@ public class PlayerActivity extends Activity {
             boolean active = option.index == selectedStreamIndex;
             button.setTag(option.index);
             stylePlayerButton(button, active);
-            button.setOnClickListener(view -> loadStream(option.index, true));
+            button.setOnClickListener(view -> {
+                resetOverlayTimer();
+                loadStream(option.index, true);
+            });
             button.setMinWidth(Ui.dp(this, 140));
             button.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), 0);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, Ui.dp(this, 56));
-            params.setMargins(0, 0, Ui.dp(this, 12), 0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, Ui.dp(this, 54));
+            params.setMargins(0, 0, Ui.dp(this, 10), 0);
             streamRow.addView(button, params);
         }
 
         Button external = actionButton("Mở ngoài");
         stylePlayerButton(external, false);
         external.setOnClickListener(view -> openExternal());
-        external.setMinWidth(Ui.dp(this, 140));
+        external.setMinWidth(Ui.dp(this, 130));
         external.setPadding(Ui.dp(this, 16), 0, Ui.dp(this, 16), 0);
-        LinearLayout.LayoutParams externalParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 56));
+        LinearLayout.LayoutParams externalParams = new LinearLayout.LayoutParams(-2, Ui.dp(this, 54));
         externalParams.setMargins(Ui.dp(this, 6), 0, 0, 0);
         streamRow.addView(external, externalParams);
     }
@@ -410,6 +460,8 @@ public class PlayerActivity extends Activity {
         }
         int nextIndex = Math.max(0, Math.min(selectedStreamIndex + delta, currentStream.options.size() - 1));
         if (nextIndex != selectedStreamIndex) {
+            String label = currentStream.options.get(nextIndex).label;
+            Toast.makeText(this, "🎙️ " + label, Toast.LENGTH_SHORT).show();
             setOverlayVisible(true);
             loadStream(nextIndex, true);
         }
@@ -419,6 +471,7 @@ public class PlayerActivity extends Activity {
         zoomModeIndex = (zoomModeIndex + delta + ZOOM_MODES.length) % ZOOM_MODES.length;
         playerView.setResizeMode(ZOOM_MODES[zoomModeIndex]);
         zoomButton.setText("Khung hình: " + ZOOM_LABELS[zoomModeIndex]);
+        Toast.makeText(this, "Khung hình: " + ZOOM_LABELS[zoomModeIndex], Toast.LENGTH_SHORT).show();
         setOverlayVisible(true);
     }
 
