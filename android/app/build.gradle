@@ -47,7 +47,13 @@ android {
 
     signingConfigs {
         release {
-            if (hasReleaseSigning) {
+            def permanentKeystore = file("../keystore/release.keystore")
+            if (permanentKeystore.exists()) {
+                storeFile = permanentKeystore
+                storePassword = "avsport123"
+                keyAlias = "avsport"
+                keyPassword = "avsport123"
+            } else if (hasReleaseSigning) {
                 storeFile = file(releaseKeystoreFile.toString())
                 storePassword = releaseKeystorePassword.toString()
                 keyAlias = releaseKeyAlias.toString()
@@ -64,7 +70,8 @@ android {
         release {
             minifyEnabled = false
             shrinkResources = false
-            if (hasReleaseSigning) {
+            def permanentKeystore = file("../keystore/release.keystore")
+            if (permanentKeystore.exists() || hasReleaseSigning) {
                 signingConfig = signingConfigs.release
             } else {
                 signingConfig = signingConfigs.debug

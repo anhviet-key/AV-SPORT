@@ -27,6 +27,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Ensure permanent release keystore
+        run: |
+          mkdir -p android/keystore
+          if [ ! -f "android/keystore/release.keystore" ]; then
+            echo "Generating permanent release keystore..."
+            keytool -genkey -v -keystore android/keystore/release.keystore \
+              -alias avsport -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass avsport123 -keypass avsport123 \
+              -dname "CN=AV Sport, OU=Mobile, O=AnhViet, L=Hanoi, S=Hanoi, C=VN"
+          fi
+
       - name: Read version from gradle.properties
         id: version
         run: |
@@ -36,7 +47,7 @@ jobs:
           echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Building AV Sport $VERSION_NAME ($VERSION_CODE)"
 
-      - name: Build release APK (debug-signed fallback)
+      - name: Build release APK
         working-directory: android
         run: |
           chmod +x ./gradlew
@@ -68,7 +79,7 @@ jobs:
 
           git config user.name "av-sport-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add releases/ app-update.json
+          git add releases/ app-update.json android/keystore/
           if git diff --cached --quiet; then
             echo "Nothing to publish"
             exit 0
